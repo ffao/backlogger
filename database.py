@@ -41,7 +41,11 @@ class Database:
     
     def get_current_year_scores(self):
         current_year = datetime.datetime.now(tz=bot_timezone).year
+        return self.get_scores_for_year(current_year)
+        
+    def get_scores_for_year(self, current_year):
         year_start_utc = datetime.datetime(year=current_year, month=1, day=1, tzinfo=bot_timezone).astimezone(datetime.timezone.utc)
+        year_end_utc = datetime.datetime(year=current_year+1, month=1, day=1, tzinfo=bot_timezone).astimezone(datetime.timezone.utc)
         
         # The following mess is for counting how many games have a certain status, but only if the status is the highest status the game had
         # For example, if a game gets updated to 2, then 3, it counts only as a 3
@@ -49,13 +53,13 @@ class Database:
         b = (
             select( game_history.c.user_id, game_history.c.game_name, func.max(game_history.c.status).label('status') )
             .group_by(game_history.c.user_id, game_history.c.game_name)
-            .where(game_history.c.time >= year_start_utc)
+            .where( (game_history.c.time >= year_start_utc) & (game_history.c.time < year_end_utc) )
         )
         a = game_history.join(b, (game_history.c.user_id == b.c.user_id) & (game_history.c.game_name == b.c.game_name) & (game_history.c.status == b.c.status))
         s = (
             select(a.c.game_history_user_id, a.c.game_history_status, func.count('*').label('count'))
             .select_from(a)
-            .where(a.c.game_history_time >= year_start_utc)
+            .where( (a.c.game_history_time >= year_start_utc) & (a.c.game_history_time < year_end_utc) )
             .group_by(a.c.game_history_user_id, a.c.game_history_status)
         )
         

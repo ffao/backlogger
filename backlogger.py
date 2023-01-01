@@ -4,6 +4,7 @@ from BackloggerySession import BackloggerySession
 import database
 from database import bot_timezone
 
+
 db = database.Database()
 users = db.get_users()
 sched = None
@@ -28,16 +29,19 @@ logger.addHandler(handler)
 
 TOKEN = os.environ['BACKLOGGER_BOT_TOKEN']
 
-# discord.py doesn't play nice with Python 3.10 so we need this workaround for the time being.
+# win32service doesn't play nice with Python 3.10 so we need this workaround for the time being.
 if sys.platform == "win32" and (3, 8, 0) <= sys.version_info:
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    
-client = discord.Client()
+
+intents = discord.Intents.default()
+intents.message_content = True
+client = discord.Client(intents=intents)
 
 boardchan_id = 528365754056441856
 board_id = 542496437796339723
 mainchan_id = 481237800449081356
 gifchan_id = 595801066730422282
+test_id = 281651896131911680
 
 async def update_board(client):
     scores = {}
@@ -150,9 +154,18 @@ async def send_sana_msg(channel, require_video=False):
     await parrot(msg.content, msg, channel)
 
 async def newyear():
+    cur_year = datetime.datetime.now(tz=bot_timezone).year - 1
+
     channel = client.get_channel(mainchan_id)
-    await channel.send("Feliz ano novo! Que todos zerem mais jogos em 2022! :heart:")
-    await channel.send("https://gfycat.com/imaginaryhideousdrafthorse")
+    await channel.send("Feliz ano novo! Que todos programem melhor em 2023 :heart:")
+    await channel.send("https://cdn.discordapp.com/attachments/281651896131911680/1058965207763914842/rB2_3AoLmdXdKAHI.mp4")
+
+    scores = {}
+    data = db.get_scores_for_year(cur_year)
+    for user in users:
+        for status in [2,3,4]:
+            count = (data[user][status] if user in data and status in data[user] else 0)
+            scores.setdefault(users[user]["name"], []).append(count)
 
     first_line = 'Stats for {0}:'.format(cur_year)
     text = first_line + '''
@@ -286,6 +299,9 @@ async def on_message(message):
         if message.content == "!scores":
             await message.channel.send(str(db.get_current_year_scores()))
 
+        if message.content == "!newyear":
+            await newyear()
+
         if message.content.startswith("!parrotboard"):
             await parrot(message.content[12:], message, client.get_channel(boardchan_id))
 
@@ -335,7 +351,7 @@ class PySvc(win32serviceutil.ServiceFramework):
     _svc_description_ = "Discord bot"    
 
     def SvcDoRun(self):  
-        self.loop = asyncio.get_event_loop()
+        self.loop = asyncio.new_event_loop()
         self.ReportServiceStatus(win32service.SERVICE_RUNNING)
         self.loop.run_until_complete(client.start(TOKEN))
       
@@ -343,11 +359,10 @@ class PySvc(win32serviceutil.ServiceFramework):
     def SvcStop(self):
         # tell the SCM we're shutting down  
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)  
-        asyncio.ensure_future(client.logout(), loop=self.loop)
+        asyncio.ensure_future(client.close(), loop=self.loop)
           
 if __name__ == '__main__':
     if sys.argv[-1] == "standalonerun":
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(client.start(TOKEN))
+        asyncio.run(client.start(TOKEN))
     else:
         win32serviceutil.HandleCommandLine(PySvc)
